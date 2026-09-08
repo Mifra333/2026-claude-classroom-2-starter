@@ -23,6 +23,7 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 ## App code — `app/layout.tsx`, `app/page.tsx`, `components/`
 
 - `PageProps<'/route'>` and `LayoutProps<'/route'>` are globals generated into `.next/types`, so a typecheck on a clean checkout fails until `next dev` or `next build` has run once.
+- TypeScript 7 ships no JavaScript compiler API, so `next build` type-checks by spawning the project-local `tsc` (`experimental.useTypeScriptCli`, on by default) and anything needing that API — typescript-eslint, the Vue/Angular/Svelte compilers — cannot run against it.
 - Import across the repo with the `@/*` alias (rooted at this directory), not deep relative paths.
 - `components/ui/` holds the presentational primitives (`auth-card`, `field`, `button`, `form-error`, `page-header`); extend one instead of repeating its class string.
 - `/` is the chat page: a Server Component that gates on the session, then renders `PageHeader` plus the client-only `components/chat.tsx`.
@@ -56,7 +57,7 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 - The CopilotKit Inspector is on by default in development (`enableInspector` stays unset; `showDevConsole` is deprecated and controls nothing). Its `<cpk-web-inspector>` launcher would sit on the header's sign-out button, so `app/globals.css` shifts the host down with a margin.
 - `OPENROUTER_BASE_URL` (optional, see `.env.example`) routes the model traffic through a local proxy; with a custom `url` Mastra's model router no longer reads `OPENROUTER_API_KEY` itself, which is why `lib/tutor.ts` passes `apiKey` explicitly.
 - Threads only persist inside Mastra's memory — the runtime runs on the default `InMemoryAgentRunner`, so the browser's own transcript still starts empty on reload.
-- `@copilotkit/runtime` drags in a zod-3 dependency tree that conflicts with Better Auth's zod 4, hence `.npmrc`'s `legacy-peer-deps=true`; drop it and `npm install` fails.
+- `.npmrc`'s `legacy-peer-deps=true` is what lets the tree install: Better Auth's optional `vitest` peer caps at 4 and this repo runs 5, so dropping it fails `npm install` with ERESOLVE.
 
 ## Tests — `tests/unit` (Vitest), `tests/e2e` (Playwright)
 
@@ -67,6 +68,8 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 - `tests/unit/db.test.ts` and `tests/unit/auth.test.ts` opt out of jsdom with a `// @vitest-environment node` first line and migrate a temp file, so they never touch `data/app.db`.
 - The auth test builds its own instance from `authOptions` with the `testUtils()` plugin and an explicit `secret`/`baseURL`, because Vitest does not load `.env`.
 - `tests/e2e/auth.spec.ts` does hit `data/app.db`, so it signs up a `Date.now()`-stamped email; `playwright.config.ts` also overrides `BETTER_AUTH_URL` onto its own port.
+- Vitest 5 takes `vite` as a peer dependency and `legacy-peer-deps` stops npm supplying it, so `vite` is an explicit devDependency; without it vitest dies on `Cannot find package 'vite'`.
+- On Windows libsql holds the SQLite file for ~8s after `client.close()` returns, far past the hook timeout, so the node-environment tests unlink their temp dir through `tests/unit/support/tmp-dir.ts`, which treats a failed cleanup as harmless.
 - `tests/unit/copilotkit-route.test.ts` mocks `@/lib/auth`, `@/lib/tutor`, and both CopilotKit/AG-UI modules, so it covers the 401 gate and the `resourceId` wiring without a model call; nothing in the suite calls OpenRouter.
 
 ## Styling — `app/globals.css`, `postcss.config.mjs`
@@ -81,7 +84,8 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 
 ## Tooling — `biome.json`
 
-- Biome ignores `.claude/` because its vendored skill assets fail `biome check .`, and `drizzle/` because drizzle-kit's generated JSON does not match its formatter.
+- Biome ignores `.claude/` because its vendored skill assets fail `biome check .`, `drizzle/` because drizzle-kit's generated JSON does not match its formatter, and `public/` because Biome lints SVG and the unused create-next-app logos there trip `noSvgWithoutTitle`.
+- `lib/auth-schema.ts` comes out of the generator unsorted, so `auth:generate` is followed by `npx biome check --write lib/auth-schema.ts` or `npm run lint` fails on `organizeImports`.
 - `npm run format` skips assist actions such as import sorting; use `npx biome check --write <path>` to fix those.
 
 ## Maintenance — for you, the agent
