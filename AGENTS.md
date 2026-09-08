@@ -45,7 +45,8 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 
 ## Agent — `lib/tutor.ts`, `components/chat.tsx`, `app/api/copilotkit/[...all]/`
 
-- `lib/tutor.ts` is the whole agent: one `Agent` (`TUTOR_AGENT_ID`, a butler who only keeps the user's to-do list) on `openrouter/z-ai/glm-5.3-flash`, held on a `Mastra` instance cached on `globalThis` the way `lib/db.ts` caches its connection.
+- `lib/tutor.ts` is the whole agent: one `Agent` (`TUTOR_AGENT_ID`, a butler who only keeps the user's to-do list) on `openrouter/z-ai/glm-5.3-flash`, on a `Mastra` instance.
+- `LibSQLStore` is the object that owns the libSQL client, so only the store is cached on `globalThis` the way `lib/db.ts` caches its connection; the `Mastra` instance is cached in production only, so editing `instructions` takes effect on the next hot reload instead of needing a dev-server restart.
 - Mastra's model router reads `OPENROUTER_API_KEY` itself, so no AI SDK provider package is installed and the model string keeps its `provider/vendor/model` shape.
 - Memory is `@mastra/memory` over a `LibSQLStore` on `DATABASE_URL`; the same store is passed to the `Mastra` instance too, or it warns and silently falls back to a non-durable in-memory one.
 - Mastra creates and owns its `mastra_*` tables in that file — they are not in `lib/schema.ts` and `db:generate` must not try to manage them.
@@ -70,6 +71,7 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 - `tests/e2e/auth.spec.ts` does hit `data/app.db`, so it signs up a `Date.now()`-stamped email; `playwright.config.ts` also overrides `BETTER_AUTH_URL` onto its own port.
 - Vitest 5 takes `vite` as a peer dependency and `legacy-peer-deps` stops npm supplying it, so `vite` is an explicit devDependency; without it vitest dies on `Cannot find package 'vite'`.
 - On Windows libsql holds the SQLite file for ~8s after `client.close()` returns, far past the hook timeout, so the node-environment tests unlink their temp dir through `tests/unit/support/tmp-dir.ts`, which treats a failed cleanup as harmless.
+- `tests/unit/tutor-hot-reload.test.ts` is the only test that imports `lib/tutor.ts` for real — `server-only` is mocked away, and no model call happens — and it fails the moment the `Mastra` instance is cached in development again.
 - `tests/unit/copilotkit-route.test.ts` mocks `@/lib/auth`, `@/lib/tutor`, and both CopilotKit/AG-UI modules, so it covers the 401 gate and the `resourceId` wiring without a model call; nothing in the suite calls OpenRouter.
 
 ## Styling — `app/globals.css`, `postcss.config.mjs`
