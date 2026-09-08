@@ -17,7 +17,7 @@ export default async function Home() {
       <PageHeader title="Bartholomew" subtitle={session.user.name}>
         <SignOutButton />
       </PageHeader>
-      <main className="flex-1 overflow-hidden bg-zinc-50 dark:bg-black">
+      <main className="relative flex-1 overflow-hidden bg-zinc-50 dark:bg-black">
         <Chat
           agentId={TUTOR_AGENT_ID}
           threadId={tutorThreadId(session.user.id)}

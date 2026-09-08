@@ -1,6 +1,17 @@
 @import "tailwindcss";
 
+/*
+ * The app is light-only for now. CopilotKit's chat ships light styles and does
+ * not follow the OS preference, so honouring it put a white chat box on a black
+ * page. Detaching the `dark` variant from `prefers-color-scheme` makes every
+ * `dark:` utility in components/ inert until something sets the class — the
+ * styles stay in place for a later theme toggle instead of being deleted now.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
+  /* Keeps scrollbars, form controls and autofill light as well. */
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #171717;
 }
@@ -10,13 +21,6 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
@@ -36,4 +40,18 @@ body {
  */
 cpk-web-inspector {
   margin-top: 4rem;
+}
+
+/*
+ * <CopilotKit> wraps the chat in an element it styles `display: contents`
+ * inline, so a percentage height inside it has nothing to resolve against and
+ * the chat collapsed to its content height. Position the chat against <main>
+ * instead — absolute positioning ignores the wrapper entirely and needs no
+ * percentage. This lives here rather than in a `className` because CopilotKit's
+ * stylesheet is unlayered and its own `cpk:relative` would win over a Tailwind
+ * utility; `app/page.tsx` gives <main> the `relative` that anchors this.
+ */
+main > div > .copilotKitChat {
+  position: absolute;
+  inset: 0;
 }

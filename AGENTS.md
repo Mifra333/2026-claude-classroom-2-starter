@@ -77,6 +77,8 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 ## Styling — `app/globals.css`, `postcss.config.mjs`
 
 - Tailwind v4 has no `tailwind.config.*`; design tokens live in the `@theme inline` block of `globals.css`.
+- The app is light-only: `@custom-variant dark (&:where(.dark, .dark *))` detaches the `dark:` utilities from `prefers-color-scheme`, so the ones still in `components/ui/` are inert until something sets the class — CopilotKit's chat ships light styles and looked like a white box on a black page otherwise.
+- The chat is sized from `globals.css` (`position: absolute; inset: 0` against the `relative` `<main>`), not from a `className`: CopilotKit's provider wrapper is inline-styled `display: contents`, so percentage heights inside it never resolve, and its stylesheet is unlayered, so `cpk:` classes beat any Tailwind utility you try to override them with.
 - The `body` rule in `globals.css` applies `--font-geist-sans` globally, so reach for a `font-mono` utility only where the mono face is actually wanted.
 
 ## Secrets — `.env`
