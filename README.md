@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# ai-tutor
 
-## Getting Started
+AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra
+agent served to a CopilotKit chat over AG-UI, behind Better Auth email/password
+sign-in, over a Drizzle/SQLite persistence layer.
 
-First, run the development server:
+See `AGENTS.md` for how the pieces fit together and why.
+
+## Setup on a new machine
+
+A clone gives you the source, but not the machine-local state — `node_modules`,
+the SQLite file, `.env`, and the Playwright browser are all git-ignored. From a
+fresh clone:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install                       # .npmrc pins legacy-peer-deps; without it this fails
+npm rebuild esbuild               # native binaries are per-machine
+cp .env.example .env              # then fill in the real values (see below)
+npm run db:migrate                # creates data/app.db from drizzle/
+npx next typegen                  # generates .next/types, or the typecheck fails
+npx playwright install chromium   # only needed for npm run test:e2e
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`.env` needs `DATABASE_URL`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` and
+`OPENROUTER_API_KEY`; `OPENROUTER_BASE_URL` is optional and routes model traffic
+through a local proxy. Never commit the file.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Then `npm run dev` and open http://localhost:3000.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Verifying a checkout
 
-## Learn More
+```bash
+npm run lint      # biome check
+npm test          # vitest, single run
+npm run build     # also type-checks via the project-local tsc
+npm run test:e2e  # playwright, own dev server on port 3100
+```
 
-To learn more about Next.js, take a look at the following resources:
+## Commands
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+See the Commands section of `AGENTS.md` for the full list, including the
+`db:generate` / `db:migrate` and `auth:generate` flows.
