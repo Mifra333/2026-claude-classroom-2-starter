@@ -4,7 +4,7 @@ import {
   createCopilotRuntimeHandler,
 } from "@copilotkit/runtime/v2";
 import { auth } from "@/lib/auth";
-import { mastra, TUTOR_AGENT_ID } from "@/lib/tutor";
+import { mastra, TUTOR_AGENT_ID, tutorRequestContext } from "@/lib/tutor";
 
 const basePath = "/api/copilotkit";
 
@@ -16,11 +16,14 @@ async function handler(request: Request) {
 
   // The whole isolation story: `resourceId` is the verified user id and is
   // never read from the request, so the memory Mastra loads and writes belongs
-  // to the caller by construction. Built per request, hence the runtime is too.
+  // to the caller by construction. `requestContext` carries the same id to the
+  // to-do tools, which is the only way they learn whose rows to touch. Built
+  // per request, hence the runtime is too.
   const agent = MastraAgent.getLocalAgent({
     mastra,
     agentId: TUTOR_AGENT_ID,
     resourceId: session.user.id,
+    requestContext: tutorRequestContext(session.user.id),
   });
 
   const runtime = new CopilotRuntime({

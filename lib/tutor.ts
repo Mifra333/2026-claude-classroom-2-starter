@@ -1,8 +1,11 @@
 import "server-only";
 import { Agent } from "@mastra/core/agent";
 import { Mastra } from "@mastra/core/mastra";
+import { RequestContext } from "@mastra/core/request-context";
 import { LibSQLStore } from "@mastra/libsql";
 import { Memory } from "@mastra/memory";
+import { db } from "@/lib/db";
+import { createTodoTools, TODO_USER_ID_KEY } from "@/lib/todos";
 
 /** Registry key of the one agent, and the CopilotKit `agentId` on the client. */
 export const TUTOR_AGENT_ID = "tutor";
@@ -17,6 +20,20 @@ export function tutorThreadId(userId: string) {
   return `tutor:${userId}`;
 }
 
+/**
+ * The only way a user id reaches the to-do tools. The route builds this from
+ * the verified session per request; the AG-UI bridge forwards it to every tool
+ * `execute`, and the client's own `input.context` lands under a separate
+ * "ag-ui" key, so nothing the browser sends can overwrite it.
+ */
+export function tutorRequestContext(userId: string) {
+  // Unparameterised on purpose: @ag-ui/mastra takes a plain `RequestContext`,
+  // and a typed one is not assignable to it.
+  const requestContext = new RequestContext();
+  requestContext.set(TODO_USER_ID_KEY, userId);
+  return requestContext;
+}
+
 const instructions = `You are Bartholomew, a butler of the old English school, in service as the
 user's personal keeper of their to-do list.
 
@@ -29,13 +46,24 @@ Manner:
 - Keep replies short. A butler informs; he does not lecture.
 
 Your duties, and nothing besides:
-- Add, amend, complete, reorder, and remove items on the user's to-do list.
+- Add items to the user's to-do list, and mark items done or not done.
 - Read the list back, in whole or in part, and answer questions about what is on it.
 - Ask one brief clarifying question when an instruction is genuinely ambiguous.
 
-You hold the list in your memory of this conversation. It persists between visits, so
-recall what was already agreed rather than asking the user to repeat themselves. When you
-have changed the list, state plainly what now stands.
+The list lives in your tools, not in your memory of the conversation:
+- listTodos reads it. Call it before answering anything about what is on the list, and
+  before marking something done — you need the item's id, and the list may have changed
+  since you last looked.
+- addTodo puts one item on it, in the user's own words, trimmed to a short line.
+- setTodoDone completes an item, or puts it back on the list.
+
+Volunteer the list where it helps. When the user mentions something they mean to do —
+in passing, or at the end of a longer message — offer to put it on the list rather than
+letting it go by. When they say a thing is finished, offer to mark it done. Ask first,
+briefly; do not add or complete anything the user has not agreed to. Add one item per
+thing to be done, never several at once in a single line.
+
+When you have changed the list, state plainly what now stands.
 
 Refusals — this matters:
 - Any request that is not about this user's to-do list is outside your duties. That
@@ -91,6 +119,9 @@ function createMastra(storage: LibSQLStore) {
           }),
         },
         memory: new Memory({ storage, options: { lastMessages: 40 } }),
+        // The connection is handed in rather than imported by lib/todos.ts, so
+        // the executors stay testable against a throwaway database.
+        tools: createTodoTools(db),
       }),
     },
   });

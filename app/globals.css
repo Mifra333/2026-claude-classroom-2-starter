@@ -34,24 +34,29 @@ body {
  * it, so this element does not exist there and the rule matches nothing.
  *
  * Its <cpk-web-inspector> host anchors the launcher 16px into the top-right
- * corner, on top of the header's sign-out button, and takes the clicks meant
- * for it. The host is positioned by a transform, so shift it with the margin
- * instead; dragging the launcher elsewhere still works and is remembered.
+ * corner, on top of the header's sign-out button and then on the todos
+ * sidebar's count, and takes the clicks meant for them. The host is positioned
+ * by a transform, so shift it clear of both with margins; dragging the launcher
+ * elsewhere still works and is remembered.
  */
 cpk-web-inspector {
   margin-top: 4rem;
+  /* The host is `left: 0` and placed by a transform, so only a left margin
+     moves it sideways — clear of the `w-72` sidebar. */
+  margin-left: -19rem;
 }
 
 /*
  * <CopilotKit> wraps the chat in an element it styles `display: contents`
  * inline, so a percentage height inside it has nothing to resolve against and
- * the chat collapsed to its content height. Position the chat against <main>
+ * the chat collapsed to its content height. Position the chat against its pane
  * instead — absolute positioning ignores the wrapper entirely and needs no
  * percentage. This lives here rather than in a `className` because CopilotKit's
  * stylesheet is unlayered and its own `cpk:relative` would win over a Tailwind
- * utility; `app/page.tsx` gives <main> the `relative` that anchors this.
+ * utility; `app/page.tsx` gives `.chat-pane` the `relative` that anchors this,
+ * which also keeps the chat off the todos sidebar beside it.
  */
-main > div > .copilotKitChat {
+.chat-pane > div > .copilotKitChat {
   position: absolute;
   inset: 0;
 }

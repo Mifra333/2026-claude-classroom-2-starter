@@ -17,6 +17,7 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 - `npm run dev` / `npm run build` / `npm run start`.
 - `npm run lint` is `biome check` and `npm run format` is `biome format --write` — Biome only, so never add ESLint or Prettier config.
 - `npm test` (Vitest, single run), `npm run test:watch`, `npm run test:e2e` (Playwright).
+- `npm run test:e2e:llm` runs the Playwright suite that spends OpenRouter calls, which `test:e2e` never does.
 - `npm run db:generate` writes a migration from the schema and `npm run db:migrate` applies it to `DATABASE_URL`.
 - `npm run auth:generate` regenerates `lib/auth-schema.ts` from the Better Auth config; follow it with `db:generate` + `db:migrate`.
 
@@ -26,7 +27,8 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 - TypeScript 7 ships no JavaScript compiler API, so `next build` type-checks by spawning the project-local `tsc` (`experimental.useTypeScriptCli`, on by default) and anything needing that API — typescript-eslint, the Vue/Angular/Svelte compilers — cannot run against it.
 - Import across the repo with the `@/*` alias (rooted at this directory), not deep relative paths.
 - `components/ui/` holds the presentational primitives (`auth-card`, `field`, `button`, `form-error`, `page-header`); extend one instead of repeating its class string.
-- `/` is the chat page: a Server Component that gates on the session, then renders `PageHeader` plus the client-only `components/chat.tsx`.
+- `/` is the chat page: a Server Component that gates on the session, then renders `PageHeader`, the client-only `components/chat.tsx`, and `components/todo-sidebar.tsx` beside it.
+- The sidebar is server-rendered from `listTodosFor` and read-only; `components/chat.tsx` subscribes to the AG-UI agent and calls `router.refresh()` once a run that used a write tool has finalized, so there is deliberately no todos endpoint.
 
 ## Persistence — `lib/db.ts`, `lib/schema.ts`, `lib/auth-schema.ts`, `drizzle.config.ts`, `drizzle/`
 
@@ -46,6 +48,12 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 ## Agent — `lib/tutor.ts`, `components/chat.tsx`, `app/api/copilotkit/[...all]/`
 
 - `lib/tutor.ts` is the whole agent: one `Agent` (`TUTOR_AGENT_ID`, a butler who only keeps the user's to-do list) on `openrouter/z-ai/glm-5.3-flash`, on a `Mastra` instance.
+- `lib/todos.ts` holds the agent's `listTodos`/`addTodo`/`setTodoDone` tools and takes the connection as an argument, which keeps `lib/db.ts`'s `server-only` marker out of its module graph so a test can run the executors against a throwaway file.
+- `lib/todo-tool-contract.ts` is the one definition of those tool names and their argument/result schemas, kept free of any database import so the Client Components can share it.
+- `components/tool-call-view.tsx` renders each call into the transcript and reaches `<CopilotKit>` through `renderToolCalls`; a tool with no registered renderer and no `"*"` fallback shows the user nothing at all.
+- It imports `ReactToolCallRenderer` as a type only and takes the `ToolCallStatus` enum from `@copilotkit/core`, so a Vitest worker can load it — `@copilotkit/react-core/v2` pulls a stylesheet Node refuses.
+- Each tool reads its owner from `TODO_USER_ID_KEY` on the request context — `tutorRequestContext(session.user.id)`, built in the route — and throws rather than defaulting when it is absent.
+- Every statement those tools issue carries `userId` in its WHERE clause, so another user's row id matches nothing; the bridge files the client's own `input.context` under a separate `ag-ui` key, so the browser cannot overwrite the id.
 - `LibSQLStore` is the object that owns the libSQL client, so only the store is cached on `globalThis` the way `lib/db.ts` caches its connection; the `Mastra` instance is cached in production only, so editing `instructions` takes effect on the next hot reload instead of needing a dev-server restart.
 - Mastra's model router reads `OPENROUTER_API_KEY` itself, so no AI SDK provider package is installed and the model string keeps its `provider/vendor/model` shape.
 - Memory is `@mastra/memory` over a `LibSQLStore` on `DATABASE_URL`; the same store is passed to the `Mastra` instance too, or it warns and silently falls back to a non-durable in-memory one.
@@ -54,8 +62,8 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 - Thread ids are `tutor:<userId>` (`tutorThreadId`), rendered into the page from the session so a reload rejoins the same conversation; a forged one fails on Mastra's `AGENT_MEMORY_THREAD_RESOURCE_MISMATCH`, which is what actually keeps user A out of user B's thread.
 - The route answers 401 before touching Mastra, and that is the only auth gate — the runtime endpoint is otherwise public.
 - Use `createCopilotRuntimeHandler` from `@copilotkit/runtime/v2`; the package's own `skills/runtime/` docs flag the Express and Hono adapters as "avoid at all costs".
-- `@copilotkit/react-core/v2` is the whole client surface (`CopilotKit`, `CopilotChat`, `styles.css`) — `@copilotkit/react-ui` and the package roots are v1 and do not work with it.
-- The CopilotKit Inspector is on by default in development (`enableInspector` stays unset; `showDevConsole` is deprecated and controls nothing). Its `<cpk-web-inspector>` launcher would sit on the header's sign-out button, so `app/globals.css` shifts the host down with a margin.
+- `@copilotkit/react-core/v2` is the whole client surface (`CopilotKit`, `CopilotChat`, `styles.css`) — `@copilotkit/react-ui` and the package roots are v1 and do not work with it; `@copilotkit/core` holds the few runtime values it does not re-export, such as `ToolCallStatus`.
+- The CopilotKit Inspector is on by default in development (`enableInspector` stays unset; `showDevConsole` is deprecated and controls nothing). Its `<cpk-web-inspector>` launcher would sit on the header's sign-out button and the todos sidebar, so `app/globals.css` shifts the host clear with margins — the host is `left: 0` and placed by a transform, so `margin-right` does nothing and only `margin-left` moves it sideways.
 - `OPENROUTER_BASE_URL` (optional, see `.env.example`) routes the model traffic through a local proxy; with a custom `url` Mastra's model router no longer reads `OPENROUTER_API_KEY` itself, which is why `lib/tutor.ts` passes `apiKey` explicitly.
 - Threads only persist inside Mastra's memory — the runtime runs on the default `InMemoryAgentRunner`, so the browser's own transcript still starts empty on reload.
 - `.npmrc`'s `legacy-peer-deps=true` is what lets the tree install: Better Auth's optional `vitest` peer caps at 4 and this repo runs 5, so dropping it fails `npm install` with ERESOLVE.
@@ -71,14 +79,18 @@ AI tutoring web app on Next.js 16 App Router + React 19 + Tailwind v4: a Mastra 
 - `tests/e2e/auth.spec.ts` does hit `data/app.db`, so it signs up a `Date.now()`-stamped email; `playwright.config.ts` also overrides `BETTER_AUTH_URL` onto its own port.
 - Vitest 5 takes `vite` as a peer dependency and `legacy-peer-deps` stops npm supplying it, so `vite` is an explicit devDependency; without it vitest dies on `Cannot find package 'vite'`.
 - On Windows libsql holds the SQLite file for ~8s after `client.close()` returns, far past the hook timeout, so the node-environment tests unlink their temp dir through `tests/unit/support/tmp-dir.ts`, which treats a failed cleanup as harmless.
-- `tests/unit/tutor-hot-reload.test.ts` is the only test that imports `lib/tutor.ts` for real — `server-only` is mocked away, and no model call happens — and it fails the moment the `Mastra` instance is cached in development again.
-- `tests/unit/copilotkit-route.test.ts` mocks `@/lib/auth`, `@/lib/tutor`, and both CopilotKit/AG-UI modules, so it covers the 401 gate and the `resourceId` wiring without a model call; nothing in the suite calls OpenRouter.
+- `tests/unit/tutor.test.ts` is the only test that imports `lib/tutor.ts` for real — `server-only` is mocked away, and no model call happens — and it fails the moment the `Mastra` instance is cached in development again.
+- `tests/unit/todo-tools.test.ts` runs the tool executors themselves against a migrated temp file, covering the per-user isolation and the refusal to run without a user id.
+- `tests/unit/tool-call-view.test.tsx` renders the tool-call renderers directly, so it needs neither CopilotKit nor a model.
+- `tests/unit/copilotkit-route.test.ts` mocks `@/lib/auth`, `@/lib/tutor`, and both CopilotKit/AG-UI modules, so it covers the 401 gate and the `resourceId`/`requestContext` wiring without a model call; nothing in `npm test` calls OpenRouter.
+- `tests/e2e-llm/` costs model calls, so `playwright.llm.config.ts` extends the default config with its own `testDir` there — `playwright.config.ts` cannot reach it, whichever way it is invoked.
+- The chat composer's send button carries no accessible name and stays disabled until CopilotKit reaches the runtime, so an e2e that types before then loses the message.
 
 ## Styling — `app/globals.css`, `postcss.config.mjs`
 
 - Tailwind v4 has no `tailwind.config.*`; design tokens live in the `@theme inline` block of `globals.css`.
 - The app is light-only: `@custom-variant dark (&:where(.dark, .dark *))` detaches the `dark:` utilities from `prefers-color-scheme`, so the ones still in `components/ui/` are inert until something sets the class — CopilotKit's chat ships light styles and looked like a white box on a black page otherwise.
-- The chat is sized from `globals.css` (`position: absolute; inset: 0` against the `relative` `<main>`), not from a `className`: CopilotKit's provider wrapper is inline-styled `display: contents`, so percentage heights inside it never resolve, and its stylesheet is unlayered, so `cpk:` classes beat any Tailwind utility you try to override them with.
+- The chat is sized from `globals.css` (`position: absolute; inset: 0` against the `relative` `.chat-pane` that keeps it off the sidebar), not from a `className`: CopilotKit's provider wrapper is inline-styled `display: contents`, so percentage heights inside it never resolve, and its stylesheet is unlayered, so `cpk:` classes beat any Tailwind utility you try to override them with.
 - The `body` rule in `globals.css` applies `--font-geist-sans` globally, so reach for a `font-mono` utility only where the mono face is actually wanted.
 
 ## Secrets — `.env`

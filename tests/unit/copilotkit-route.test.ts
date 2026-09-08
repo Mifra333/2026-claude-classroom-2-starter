@@ -5,7 +5,13 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 // against stand-ins; only the branch before them is under test here.
 const getSession = vi.fn();
 vi.mock("@/lib/auth", () => ({ auth: { api: { getSession } } }));
-vi.mock("@/lib/tutor", () => ({ TUTOR_AGENT_ID: "tutor", mastra: {} }));
+vi.mock("@/lib/tutor", () => ({
+  TUTOR_AGENT_ID: "tutor",
+  mastra: {},
+  // Stood in for so the assertions can see which id the route fed it;
+  // tests/unit/tutor.test.ts covers what the real one builds.
+  tutorRequestContext: (userId: string) => `request-context-for:${userId}`,
+}));
 
 const getLocalAgent = vi.fn(() => ({ agentId: "tutor" }));
 vi.mock("@ag-ui/mastra", () => ({ MastraAgent: { getLocalAgent } }));
@@ -75,6 +81,23 @@ describe("the CopilotKit route", () => {
 
     expect(getLocalAgent).toHaveBeenCalledWith(
       expect.objectContaining({ resourceId: "user-b" }),
+    );
+  });
+
+  test("hands the to-do tools the session's user id, not the request's", async () => {
+    getSession.mockResolvedValue({ user: { id: "user-b" } });
+
+    await POST(
+      new Request("http://localhost/api/copilotkit/agent/tutor/run", {
+        method: "POST",
+        body: JSON.stringify({ context: [{ value: "user-a" }] }),
+      }),
+    );
+
+    expect(getLocalAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestContext: "request-context-for:user-b",
+      }),
     );
   });
 });
